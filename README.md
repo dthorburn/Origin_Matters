@@ -12,7 +12,6 @@ Whole genome sequencing enables to ask fundamental questions about genomics of a
 
 ### Analyses
 Below are the analyses and a brief description in the order in which they were conducted for this study:
-#### 01_Reference_Genome_Assembly
 #### 02_Maker_Annotation
 Annotating the reference genome using Maker v2.31.9
 #### 03_Prepare_Reference_Genomes
@@ -47,5 +46,4 @@ Creating a phylogenetic tree to confirm the phylogenetic relationship between th
 Generation of the maping efficiency dataset using Bamtools
 #### 18_OrthoFinder
 Identification of all orthologous genes among the two reference genome assemblies using OrthoFinder
-#### 19_GO_Enrichment
-A gene ontology enrichment analysis on outlier genes using the R library [g:Profiler2](https://CRAN.R-project.org/package=gprofiler2). 
+
