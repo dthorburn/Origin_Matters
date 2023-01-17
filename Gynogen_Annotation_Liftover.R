@@ -1,18 +1,20 @@
 ## Updating the coordinates in the unmapped region of the reference genome
 ## Date: 17/01/23
 
-
 library(data.table)
 library(dplyr)
 
-contigs <- fread("Contigs_to_unmap2.csv", header = F)
-cont_lens <- fread("Gynogene_pchrom_noUn.fasta.fai")[,c(1:2)]
+contigs <- fread("D:/QM_PhD/QM_PhD/Chapter_4_CompGen/04_Synteny/01_Chromosembl/Contigs_to_unmap2.csv", header = F)
+#contigs <- fread("D:/QM_PhD/QM_PhD/Chapter_4_CompGen/04_Synteny/01_Chromosembl/Contigs_to_unmap.csv", header = F)
+cont_lens <- fread("D:/QM_PhD/QM_PhD/Chapter_4_CompGen/ENA_Upload/Updated/Gynogene_pchrom_updated.fasta.fai")[,c(1:2)]
+#cont_lens <- fread("D:/QM_PhD/QM_PhD/Chapter_4_CompGen/04_Synteny/01_Chromosembl/Gynogen_PacBio_reference.fasta.fai")[,c(1:2)]
+
 to_remap <- merge(contigs, cont_lens, by = "V1")
 sum(to_remap$V2)
 #fwrite(to_remap, file = "D:/QM_PhD/QM_PhD/Chapter_4_CompGen/ENA_Upload/Updated/Gynogene_chrUn_remapping_coords.csv")
 
-cont_coords <- fread("Gynogene_chrUn_remapping_coords.csv") 
-gtf <- rtracklayer::readGFF("Gy_allnoM_rd3.maker_apocrita.noseq.gff") %>% as.data.table
+cont_coords <- fread("D:/QM_PhD/QM_PhD/Chapter_4_CompGen/ENA_Upload/Updated/Gynogene_chrUn_remapping_coords2.csv") 
+gtf <- rtracklayer::readGFF("D:/QM_PhD/QM_PhD/Chapter_4_CompGen/12_Annotation/Gy_allnoM_rd3.maker_apocrita.noseq.gff") %>% as.data.table
 
 ## Separating unmapped and mapped chrs
 uns <- subset(gtf, seqid == "Gy_chrUn")
@@ -59,22 +61,31 @@ for(wg in misplaced_geneIDs){
 ###############################################
 ##         Step 2: Updating the GFF 	     ##
 ###############################################
-## CLucnky as hell, but it works. 
+## Clucnky as hell, but it works. 
 for(i in 1:nrow(cont_coords)){
 	temp_contig <- cont_coords[i,]
 	message(temp_contig$ID)
+
+	## Isolating the correct annotations
 	temp_annots <- subset(temp_uns, start >= temp_contig$Remap_Start & end <= temp_contig$Remap_End)
 	temp_annots$seqid <- temp_annots$seqid %>% gsub(., pattern = "Gy_chrUn", replacement = temp_contig$ID)
 	temp_annots$ID    <- temp_annots$ID %>% gsub(., pattern = "Gy_chrUn", replacement = temp_contig$ID)
 	temp_annots$Parent <- temp_annots$Parent %>% gsub(., pattern = "Gy_chrUn", replacement = temp_contig$ID)
 	temp_annots$Name <- temp_annots$Name %>% gsub(., pattern = "Gy_chrUn", replacement = temp_contig$ID)
 	temp_annots$Target <- temp_annots$Target %>% gsub(., pattern = "Gy_chrUn", replacement = temp_contig$ID)
+
+	## Adjusting the coordinates
+	temp_annots[,"start" := start - temp_contig$Remap_Start]	
+	temp_annots[,"end" := end - temp_contig$Remap_Start]	
+
+	## Generating the contig annotation
 	temp_cont <- subset(uns, type == "contig")
 	temp_cont$seqid <- temp_contig$ID
 	temp_cont$ID <- temp_contig$ID
 	temp_cont$Name <- temp_contig$ID
 	temp_cont$end <- temp_contig$Length
 
+	## Building adjusted output
 	temp_output <- rbind(temp_cont, temp_annots)
 	if(i == 1){
 		new_uns <- temp_output
@@ -84,10 +95,29 @@ for(i in 1:nrow(cont_coords)){
 }
 
 all_annots <- rbind(non, new_uns)
-fwrite(all_annots, file = "Gy_updated_GychrUn_Annots.csv")
+fwrite(all_annots, file = "D:/QM_PhD/QM_PhD/Chapter_4_CompGen/ENA_Upload/Gy_updated_GychrUn_Annots.csv")
 
 ###############################################
-##         Step 3: Writing the GFF  	     ##
+##         Step 3: Validating Changes 	     ##
+###############################################
+check_contig <- function(contig_id){
+	message(contig_id)
+	new_cont <- subset(new_uns, seqid == contig_id & type == "gene")
+	if(nrow(new_cont) == 0){
+		message(paste0("No genes in ", contig_id))
+	} else {
+		old_coords <- subset(uns, ID == new_cont$ID[1])
+		message(paste0("samtools faidx Gynogene_pchrom_updated.fasta ", contig_id, ":", new_cont$start[1], "-", new_cont$end[1]))
+		message(paste0("samtools faidx Gynogen_pchrom_assembly_all.fasta Gy_chrUn:", old_coords$start[1], "-", old_coords$end[1]))
+	}
+}
+
+for(cont in cont_coords$ID){
+	check_contig(cont)
+}
+
+###############################################
+##         Step 4: Writing the GFF  	     ##
 ###############################################
 ## NB this section was parallelised on an HPC
 gff_attributes <- function(row_num, df = all_annots){
